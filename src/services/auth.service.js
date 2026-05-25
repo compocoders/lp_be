@@ -17,7 +17,6 @@ export const registerUser = async (data) => {
   const user = await prisma.user.create({
     data: {
       email: data.email,
-      name: data.name,
       password: hashedPassword,
     },
   });
@@ -28,7 +27,6 @@ export const registerUser = async (data) => {
     user: {
       id: user.id,
       email: user.email,
-      name: user.name,
     },
     token,
   };
@@ -55,7 +53,6 @@ export const loginUser = async (data) => {
     user: {
       id: user.id,
       email: user.email,
-      name: user.name,
     },
     token,
   };
