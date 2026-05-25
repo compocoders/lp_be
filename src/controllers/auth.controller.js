@@ -24,7 +24,6 @@ export const getMe = async (req, res, next) => {
       user: {
         id: req.user.id,
         email: req.user.email,
-        name: req.user.name,
       }
     });
   } catch (error) {
