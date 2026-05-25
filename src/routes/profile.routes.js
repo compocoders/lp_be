@@ -15,6 +15,8 @@ const profileSchema = z.object({
 });
 
 router.post('/', authenticate, validate(profileSchema), profileController.createProfile);
-router.put('/', authenticate, validate(profileSchema), profileController.updateProfile);
+router.put('/:_id', authenticate, validate(profileSchema), profileController.updateProfile);
 router.get('/me', authenticate, profileController.getProfile);
 router.get('/:id', authenticate, profileController.getProfileById);
+
+export default router;

@@ -1,4 +1,4 @@
-import profileService from '../services/profile.service.js';
+import * as profileService from '../services/profile.service.js';
 
 export const createProfile = async (req, res, next) => {
     try {
@@ -26,6 +26,8 @@ export const getProfile = async (req, res, next) => {
         next(error);
     }
 };
+
+
 
 export const getProfileById = async (req, res, next) => {
     try {

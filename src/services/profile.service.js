@@ -1,4 +1,4 @@
-import prisma from '../prisma/client.js';
+import { prisma } from '../config/db.js';
 
 const checkProfileExists = async (userId) => {
   const profile = await prisma.profile.findUnique({
@@ -34,8 +34,13 @@ const updateProfile = async (userId, data) => {
 };
 
 const getProfile = async (userId) => {
-    return prisma.profile.findUnique({
-        where: { userId },
+    return checkProfileExists(userId).then(exists => {
+        if (!exists) {
+            throw new Error('Profile does not exist for this user');
+        }
+        return prisma.profile.findUnique({
+            where: { userId },
+        });
     });
 };
 
@@ -45,23 +50,11 @@ const getProfileById = async (profileId) => {
     });
 };
 
-const deleteProfile = async (userId) => {
-    return checkProfileExists(userId).then(exists => {
-        if (!exists) {
-            throw new Error('Profile does not exist for this user');
-        }
-        return prisma.profile.update({
-            where: { userId },
-            status: 'deleted',
-        });
-    });
-};
 
 export {
     createProfile,
     updateProfile,
     getProfile,
-    deleteProfile,
     getProfileById,
     checkProfileExists,
 };
