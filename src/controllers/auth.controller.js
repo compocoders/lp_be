@@ -3,7 +3,10 @@ import * as authService from '../services/auth.service.js';
 export const register = async (req, res, next) => {
   try {
     const result = await authService.registerUser(req.body);
-    res.status(201).json(result);
+    // 1. Set the cookie
+    res.cookie('token', result.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Strict' });
+    // 2. Only send the user data back!
+    res.status(201).json({ user: result.user }); 
   } catch (error) {
     next(error);
   }
@@ -12,6 +15,7 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const result = await authService.loginUser(req.body);
+    res.cookie('token', result.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Strict' });
     res.status(200).json(result);
   } catch (error) {
     next(error);
