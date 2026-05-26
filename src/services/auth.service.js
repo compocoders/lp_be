@@ -56,4 +56,5 @@ export const loginUser = async (data) => {
     },
     token,
   };
+
 };
