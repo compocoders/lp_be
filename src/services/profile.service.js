@@ -34,13 +34,8 @@ const updateProfile = async (userId, data) => {
 };
 
 const getProfile = async (userId) => {
-    return checkProfileExists(userId).then(exists => {
-        if (!exists) {
-            throw new Error('Profile does not exist for this user');
-        }
-        return prisma.profile.findUnique({
-            where: { userId },
-        });
+    return prisma.profile.findUnique({
+        where: { userId },
     });
 };
 

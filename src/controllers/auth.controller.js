@@ -16,7 +16,8 @@ export const login = async (req, res, next) => {
   try {
     const result = await authService.loginUser(req.body);
     res.cookie('token', result.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Strict' });
-    res.status(200).json(result);
+    // 2. Only send the user data back!
+    res.status(201).json({ user: result.user }); 
   } catch (error) {
     next(error);
   }
