@@ -24,5 +24,6 @@ const loginSchema = z.object({
 router.post('/register', validate(registerSchema), authController.register);
 router.post('/login', validate(loginSchema), authController.login);
 router.get('/me', authenticate, authController.getMe);
+router.post('/logout', authController.logout);
 
 export default router;
