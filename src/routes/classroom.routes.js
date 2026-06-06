@@ -21,17 +21,19 @@ const updateRoomSchema = z.object({
         description: z.string().optional(),
         status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
         private: z.boolean().optional(),
-        roomPassword: z.string().optional()
+        roomPassword: z.string().optional(),
+        oldPassword: z.string().optional()
     }),
 });
 
-router.get('/search/:code', classroomController.getRoomsbyCode);
+router.get('/:code', classroomController.getRoomsbyCode);
 router.post('/', authenticate, validate(createRoomSchema), classroomController.createRooms);
 router.get('/my-rooms', authenticate, classroomController.getRoomsbyUserId);
+router.get('/joined-rooms', authenticate, classroomController.getRoomsbyUserJoined);
 router.put('/:id', authenticate, validate(updateRoomSchema), classroomController.updateRooms);
 router.delete('/:id', authenticate, classroomController.deleteRooms);
-
 router.post('/:id/invite', authenticate, classroomController.generateInviteLink);
 router.post('/join/:token', authenticate, classroomController.joinRoomViaInvite);
+router.delete('/:id/leave', authenticate, classroomController.leaveRoom);
 
 export default router;

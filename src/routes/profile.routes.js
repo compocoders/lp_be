@@ -30,8 +30,8 @@ const profileSchema = z.object({
     }),
 });
 
-router.post('/', authenticate, upload.single('image'), validate(profileSchema), requireNoProfile, profileController.createProfile);
-router.put('/:_id', authenticate, upload.single('image'), validate(profileSchema), profileController.updateProfile);  
+router.post('/', authenticate, upload.single('profilePicture'), validate(profileSchema), requireNoProfile, profileController.createProfile);
+router.put('/:_id', authenticate, upload.single('profilePicture'), validate(profileSchema), profileController.updateProfile);  
 router.get('/', authenticate, profileController.getProfile); // This will return the profile of the currently authenticated user
 router.get('/me', authenticate, profileController.getProfile);
 router.get('/:id', authenticate, profileController.getProfileById);

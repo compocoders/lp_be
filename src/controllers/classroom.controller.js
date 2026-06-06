@@ -9,6 +9,14 @@ export const getRoomsbyCode = async (req, res, next) => {
     }
 }
 
+export const getRoomsbyUserId = async (req, res, next) => {
+    try {
+        const rooms = await classroomService.getRoomsbyUserId(req.user.id);
+        res.status(200).json(rooms);
+    } catch (error) {
+        next(error);
+    }
+}
 export const createRooms = async (req, res, next) => {
     try {
         const data = { ...req.body, userId: req.user.id };
@@ -18,6 +26,7 @@ export const createRooms = async (req, res, next) => {
         next(error);
     }
 }
+
 
 export const updateRooms = async (req, res, next) => {
     try {
@@ -38,9 +47,9 @@ export const deleteRooms = async (req, res, next) => {
     }
 }
 
-export const getRoomsbyUserId = async (req, res, next) => {
+export const getRoomsbyUserJoined = async (req, res, next) => {
     try {
-        const rooms = await classroomService.getRoomsbyUserId(req.user.id);
+        const rooms = await classroomService.getRoomsbyUserJoined(req.user.id);
         res.status(200).json(rooms);
     } catch (error) {
         next(error);
@@ -63,6 +72,15 @@ export const joinRoomViaInvite = async (req, res, next) => {
         // req.params.token is the JWT token, req.user.id is the user trying to join
         const classroomUser = await classroomService.joinRoomWithToken(data.token, data.userId, data.roompassword);
         res.status(200).json({ message: 'Successfully joined the room', classroomUser });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export const leaveRoom = async (req, res, next) => {
+    try {
+        const result = await classroomService.leaveRoom(req.params.id, req.user.id);
+        res.status(200).json(result);
     } catch (error) {
         next(error);
     }

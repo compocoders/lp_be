@@ -3,17 +3,49 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 
+//get rooms by code
 export const getRoomsbyCode = async (code) => {
 
     const rooms = await prisma.classroom.findMany({
         where: {
             roomCode: code,
+        },
+        include: {
+            User: {
+                select: {
+                    profile: {
+                        select: {
+                            firstName: true,
+                            lastName: true,
+                        }
+                    }
+                }
+            },
+            classroomUsers: {
+                select: {
+                    userId: true,
+                    role: true,
+                    User: {
+                        select: {
+                            profile: {
+                                select: {
+                                    firstName: true,
+                                    lastName: true,
+                                    profilePicture: true,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     });
     if (rooms.length === 0) throw new Error('No rooms found with the provided code');
     if(rooms[0].status === 'DELETED') throw new Error('This class is not available');
     return rooms;
 }
+
+//create room links
 export const roomLink = async (code) => {
 
     const room = await prisma.classroom.findUnique({
@@ -25,15 +57,29 @@ export const roomLink = async (code) => {
     if(room.status === 'DELETED') throw new Error('This class is not available');
     return room;
 }
+
+
+//get rooms by user id
 export const getRoomsbyUserId = async (userId) => {
     const rooms = await prisma.classroom.findMany({
-        where: {
-            userId: userId
-        }
+        where: { userId },
     });
     return rooms;
 }
 
+
+//get rooms that user joined by user id
+export const getRoomsbyUserJoined = async (userId) => {
+    const rooms = await prisma.classroomUser.findMany({
+        where: { userId },
+        include: {
+            Classroom: true
+        }
+    });
+    return rooms.map((entry) => entry.Classroom);
+}
+
+//create rooms
 export const createRooms = async (data) => {
     const generateRoomCode = () => {
         const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -48,6 +94,12 @@ export const createRooms = async (data) => {
 
     // We use a transaction so if the user creation fails, the room isn't created either
     const [room, classRoomUser] = await prisma.$transaction(async (tx) => {
+        if (data.private && !data.roomPassword) {
+            throw new Error('Private rooms must have a password');
+        }
+        if (!data.private && data.roomPassword) {
+            throw new Error('Public rooms cannot have a password');
+        }
         const newRoom = await tx.classroom.create({
             data: {
                 name: data.name,
@@ -74,6 +126,7 @@ export const createRooms = async (data) => {
     return [room, classRoomUser];
 }
 
+//update rooms
 export const updateRooms = async (id, data, requestingUserId) => {
     // We must pass the requestingUserId from the controller to verify ownership
     const room = await prisma.classroom.findUnique({ where: { id } });
@@ -81,7 +134,32 @@ export const updateRooms = async (id, data, requestingUserId) => {
     if (!room) throw new Error('Room not found');
     if (room.userId !== requestingUserId) throw new Error('Unauthorized'); // Fixed logic
 
-    const hashedPassword = data.roomPassword ? await bcrypt.hash(data.roomPassword, 10) : null;
+    let newHashedPassword = undefined;
+
+    if (data.private) {
+        // If it's private, we need a password.
+        if (!room.roompassword && !data.roomPassword) {
+            throw new Error('A password is required when making a room private.');
+        }
+
+        if (data.roomPassword) {
+            // Changing or setting the password
+            if (room.roompassword) {
+                // If there's an existing password, they must provide oldPassword
+                if (!data.oldPassword) {
+                    throw new Error('You must provide the previous password to change it.');
+                }
+                const passwordMatch = await bcrypt.compare(data.oldPassword, room.roompassword);
+                if (!passwordMatch) {
+                    throw new Error('Incorrect previous password.');
+                }
+            }
+            newHashedPassword = await bcrypt.hash(data.roomPassword, 10);
+        }
+    } else {
+        // If making public, maybe clear the password? The requirement doesn't explicitly say so, but it's good practice.
+        newHashedPassword = null;
+    }
     
     const updatedRoom = await prisma.classroom.update({
         where: { id: id },
@@ -90,13 +168,13 @@ export const updateRooms = async (id, data, requestingUserId) => {
             description: data.description,
             status: data.status,
             private: data.private,
-            // Only update password if a new one was provided
-            ...(hashedPassword && { roompassword: hashedPassword }) 
+            ...(newHashedPassword !== undefined && { roompassword: newHashedPassword }) 
         }
     });
     return updatedRoom;
 }
 
+//delete rooms (soft delete by changing status)
 export const deleteRooms = async (id, requestingUserId) => {
     const room = await prisma.classroom.findUnique({ where: { id } });
     
@@ -111,6 +189,7 @@ export const deleteRooms = async (id, requestingUserId) => {
     return deletedRoom;
 }
 
+// Generate invite token (JWT) for a classroom
 export const generateInviteToken = async (classroomId, requestingUserId) => {
     const room = await prisma.classroom.findUnique({ where: { id: classroomId } });
     if (!room) throw new Error('Room not found');
@@ -120,6 +199,7 @@ export const generateInviteToken = async (classroomId, requestingUserId) => {
     return token;
 }
 
+// Join a room using an invite token
 export const joinRoomWithToken = async (token, userId, roompassword) => {
     try {
         const decoded = jwt.verify(token, env.JWT_SECRET);
@@ -166,7 +246,30 @@ export const joinRoomWithToken = async (token, userId, roompassword) => {
             throw new Error('Invite link has expired');
         } else if (err.name === 'JsonWebTokenError') {
             throw new Error('Invalid invite link');
+        } else if (err.code === 'P2002') {
+            throw new Error('You already joined this room');
         }
         throw err;
     }
+}
+
+// Leave a room
+export const leaveRoom = async (classroomId, userId) => {
+    const membership = await prisma.classroomUser.findFirst({
+        where: { classroomId, userId }
+    });
+
+    if (!membership) {
+        throw new Error('You are not a member of this room');
+    }
+
+    if (membership.role === 'OWNER') {
+        throw new Error('Owners cannot leave their own room, they can only delete it');
+    }
+
+    await prisma.classroomUser.delete({
+        where: { id: membership.id }
+    });
+
+    return { message: 'Successfully left the room' };
 }

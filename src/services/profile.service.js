@@ -12,6 +12,9 @@ const createProfile = async (userId, data) => {
         if (exists) {
             throw new Error('Profile already exists for this user');
         }
+        if(!data.profilePicture) {
+            throw new Error('Profile picture is required');
+        }
         return prisma.profile.create({
             data: {
                 userId,
