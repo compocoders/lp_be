@@ -8,7 +8,7 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: 'http://localhost:5173', // Adjust this if your frontend runs on a different port
+  origin: true, // Allow all origins to reflect dynamically (standard for local dev with credentials)
   credentials: true
 }));
 app.use(cookieParser());

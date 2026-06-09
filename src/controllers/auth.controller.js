@@ -4,9 +4,9 @@ export const register = async (req, res, next) => {
   try {
     const result = await authService.registerUser(req.body);
     // 1. Set the cookie
-    res.cookie('token', result.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Strict' });
+    res.cookie('token', result.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Lax' });
     // 2. Only send the user data back!
-    res.status(201).json({ user: result.user }); 
+    res.status(201).json({ user: result.user, token: result.token }); 
   } catch (error) {
     next(error);
   }
@@ -17,7 +17,7 @@ export const login = async (req, res, next) => {
     const result = await authService.loginUser(req.body);
     res.cookie('token', result.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Lax' });
     // 2. Only send the user data back!
-    res.status(201).json({ user: result.user }); 
+    res.status(201).json({ user: result.user, token: result.token }); 
   } catch (error) {
     next(error);
   }
