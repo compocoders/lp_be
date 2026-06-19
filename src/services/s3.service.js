@@ -18,21 +18,31 @@ export const uploadProfilePicture = async (file) => {
         throw new ApiError(500, 'Cloudflare R2 configuration is missing');
     }
 
-    const fileExtension = path.extname(file.originalname);
+    const fileExtension = path.extname(file.originalname).toLowerCase();
     const uniqueFilename = `profiles/${crypto.randomUUID()}${fileExtension}`;
 
-    console.log(`Uploading file to S3. Original name: ${file.originalname}, Size: ${file.buffer.length} bytes, Mimetype: ${file.mimetype}`);
+    let contentType = file.mimetype;
+    if (!contentType || contentType === 'application/octet-stream') {
+        if (fileExtension === '.webp') contentType = 'image/webp';
+        else if (fileExtension === '.png') contentType = 'image/png';
+        else if (fileExtension === '.gif') contentType = 'image/gif';
+        else if (fileExtension === '.svg') contentType = 'image/svg+xml';
+        else contentType = 'image/jpeg';
+    }
+
+    console.log(`Uploading file to S3. Original name: ${file.originalname}, Size: ${file.buffer.length} bytes, Mimetype: ${contentType}`);
 
     const command = new PutObjectCommand({
         Bucket: env.R2_BUCKET_NAME,
         Key: uniqueFilename,
         Body: file.buffer,
-        ContentType: file.mimetype,
+        ContentType: contentType,
     });
 
     try {
         await s3Client.send(command);
-        const fileUrl = env.R2_PUBLIC_URL ? `${env.R2_PUBLIC_URL}/${uniqueFilename}` : uniqueFilename;
+        const baseUrl = env.R2_PUBLIC_URL ? env.R2_PUBLIC_URL.replace(/\/+$/, '') : '';
+        const fileUrl = baseUrl ? `${baseUrl}/${uniqueFilename}` : uniqueFilename;
         return { fileUrl, key: uniqueFilename };
     } catch (error) {
         console.error('Raw S3 Upload Error:', error);

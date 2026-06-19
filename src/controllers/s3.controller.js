@@ -21,10 +21,13 @@ export const uploadProfilePicture = async (req, res, next) => {
 
         if (profile?.profilePicture) {
              const oldUrl = profile.profilePicture;
-             const publicUrl = env.R2_PUBLIC_URL;
-             if (publicUrl && oldUrl.startsWith(publicUrl)) {
-                 const oldKey = oldUrl.replace(`${publicUrl}/`, '');
-                 await s3Service.deleteFile(oldKey);
+             let publicUrl = env.R2_PUBLIC_URL;
+             if (publicUrl) {
+                 publicUrl = publicUrl.replace(/\/+$/, '');
+                 if (oldUrl.startsWith(publicUrl)) {
+                     const oldKey = oldUrl.substring(publicUrl.length).replace(/^\/+/, '');
+                     await s3Service.deleteFile(oldKey);
+                 }
              }
         }
 

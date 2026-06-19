@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import path from 'path';
 import multer from 'multer';
 import { uploadProfilePicture } from '../controllers/s3.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
@@ -10,7 +11,10 @@ const storage = multer.memoryStorage();
 
 // Add file filter to only allow images
 const fileFilter = (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'];
+    const ext = file.originalname ? path.extname(file.originalname).toLowerCase() : '';
+    
+    if (file.mimetype.startsWith('image/') || allowedExtensions.includes(ext)) {
         cb(null, true);
     } else {
         cb(new Error('Not an image! Please upload an image.'), false);
