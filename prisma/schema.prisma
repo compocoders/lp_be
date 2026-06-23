@@ -15,6 +15,7 @@ model User {
   updatedAt DateTime @updatedAt
   profile   Profile?
   classrooms Classroom[]
+  learningMaterials LearningMaterial[]
   userClassrooms classroomUser[]
 }
 
@@ -44,6 +45,7 @@ model Classroom {
   updatedAt   DateTime @updatedAt
   classroomUsers classroomUser[]
   User User @relation(fields: [userId], references: [id])
+  LearningMaterial LearningMaterial[]
 }
 
 
@@ -59,4 +61,18 @@ model classroomUser {
   User      User      @relation(fields: [userId], references: [id])
 
   @@unique([classroomId, userId])
+}
+
+model LearningMaterial {
+  id          String   @id @default(uuid())
+  classroomId String
+  userId String
+  title String
+  description String?
+  fileUrl String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Classroom Classroom @relation(fields: [classroomId], references: [id])
+  User User @relation(fields: [userId], references: [id])
 }
