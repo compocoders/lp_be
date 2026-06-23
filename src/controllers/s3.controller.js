@@ -46,3 +46,46 @@ export const uploadProfilePicture = async (req, res, next) => {
         next(error);
     }
 };
+export const uploadLearningMaterial = async (req, res, next) => {
+    try {
+        if (!req.file) {
+            throw new ApiError(400, 'No file provided');
+        }
+
+        const userId = req.user.id;
+        const classroomId = req.params.classroomId;
+        const title = req.body.title;
+        const description = req.body.description;
+        //upload file to s3
+        const { fileUrl, key } = await s3Service.uploadlearningMaterial(req.file);
+
+        //fetch current learning material to check if there's an old file
+        const learningMaterial = await prisma.learningMaterial.findUnique({
+            where: { userId, classroomId }
+        });
+        if (learningMaterial?.fileUrl) {
+            const oldUrl = learningMaterial.fileUrl;
+            let publicUrl = env.R2_PUBLIC_URL;
+            if (publicUrl) {
+                publicUrl = publicUrl.replace(/\/+$/, '');
+                if (oldUrl.startsWith(publicUrl)) {
+                    const oldKey = oldUrl.substring(publicUrl.length).replace(/^\/+/, '');
+                    await s3Service.deleteFile(oldKey);
+                }
+            }
+        }
+        //update learning material
+        const updatedLearningMaterial = await prisma.learningMaterial.upsert({
+            where: { userId, classroomId },
+            update: { title, description, fileUrl },
+            create: { userId, classroomId, title, description, fileUrl }
+        });
+        res.status(200).json({
+            message: 'Learning material uploaded successfully',
+            learningMaterial: updatedLearningMaterial
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+}
