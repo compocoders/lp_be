@@ -1,4 +1,4 @@
-import { ApiError } from '../utils/apiError.js';
+import { ApiError } from '../utils/ApiError.js';
 import { prisma } from '../config/db.js';
 
 export const requiredProfile = async (req, res, next) => {
