@@ -13,7 +13,11 @@ export const validate = (schema) => {
       if (validatedData.params) req.params = validatedData.params;
       next();
     } catch (error) {
-      next(new ApiError(400, error.errors?.[0]?.message || 'Validation Error'));
+      console.error('Validation Error Details:', error);
+      if (error.errors) {
+        console.error('Zod Issues:', JSON.stringify(error.errors, null, 2));
+      }
+      next(new ApiError(400, error.errors?.[0]?.message || error.message || 'Validation Error'));
     }
   };
 };

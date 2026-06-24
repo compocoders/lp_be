@@ -14,7 +14,11 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().optional(),
   R2_PUBLIC_URL: z.string().optional(),
+  // Judge0 CE — code execution
+  JUDGE0_BASE_URL: z.string().url().default('https://judge0-ce.p.rapidapi.com'),
+  JUDGE0_API_KEY: z.string().optional().default(''),
 });
+
 
 const _env = envSchema.safeParse(process.env);
 
