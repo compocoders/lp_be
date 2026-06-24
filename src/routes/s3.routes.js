@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import path from 'path';
 import multer from 'multer';
-import { uploadProfilePicture } from '../controllers/s3.controller.js';
+import { uploadProfilePicture, uploadFile } from '../controllers/s3.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -24,11 +24,15 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ 
     storage, 
     fileFilter,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
-    }
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
+
+const genericUpload = multer({ 
+    storage, 
+    limits: { fileSize: 25 * 1024 * 1024 } // 25MB limit for docs/files
 });
 
 router.post('/profile-picture', authenticate, upload.single('image'), uploadProfilePicture);
+router.post('/upload', authenticate, genericUpload.single('file'), uploadFile);
 
 export default router;

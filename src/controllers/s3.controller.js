@@ -46,6 +46,23 @@ export const uploadProfilePicture = async (req, res, next) => {
         next(error);
     }
 };
+
+export const uploadFile = async (req, res, next) => {
+    try {
+        if (!req.file) {
+            throw new ApiError(400, 'No file provided');
+        }
+        const { fileUrl, key } = await s3Service.uploadGenericFile(req.file);
+        res.status(200).json({
+            message: 'File uploaded successfully',
+            fileUrl,
+            key
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const uploadLearningMaterial = async (req, res, next) => {
     try {
         if (!req.file) {
