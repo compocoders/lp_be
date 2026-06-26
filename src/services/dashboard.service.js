@@ -6,6 +6,7 @@ export const getDashboardData = async (userId) => {
         select: { 
             id: true,
             email: true,
+            virtualTokens: true,
             profile: {
                 select: {
                     profilePicture: true,

@@ -11,6 +11,8 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
+  virtualTokens Int @default(500)
+  lastTokenReset DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   profile          Profile?
@@ -19,6 +21,8 @@ model User {
   userClassrooms   classroomUser[]
   createdActivities Activity[]   @relation("ActivityCreator")
   submissions      Submission[]
+  aiStudyMaterials AiStudyMaterial[]
+  aiConversations  AiConversation[]
 }
 
 model Profile {
@@ -78,6 +82,8 @@ model LearningMaterial {
 
   Classroom Classroom @relation(fields: [classroomId], references: [id])
   User      User      @relation(fields: [userId], references: [id])
+  aiStudyMaterials AiStudyMaterial[]
+  aiConversations  AiConversation[]
 }
 
 // ─── ACTIVITY SYSTEM ────────────────────────────────────────────────────────
@@ -160,4 +166,43 @@ model Answer {
 
   Submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   Question   Question   @relation(fields: [questionId], references: [id])
+}
+
+// ─── AI STUDIO SYSTEM ────────────────────────────────────────────────────────
+
+model AiStudyMaterial {
+  id                 String   @id @default(uuid())
+  learningMaterialId String
+  userId             String
+  type               String   // e.g., "summary", "reviewer", "overview"
+  content            String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  LearningMaterial LearningMaterial @relation(fields: [learningMaterialId], references: [id], onDelete: Cascade)
+  User             User             @relation(fields: [userId], references: [id])
+}
+
+model AiConversation {
+  id                 String   @id @default(uuid())
+  learningMaterialId String
+  userId             String
+  title              String
+  isSaved            Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  LearningMaterial LearningMaterial @relation(fields: [learningMaterialId], references: [id], onDelete: Cascade)
+  User             User             @relation(fields: [userId], references: [id])
+  messages         AiMessage[]
+}
+
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  sender         String   // "user" or "ai"
+  content        String
+  createdAt      DateTime @default(now())
+
+  Conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }

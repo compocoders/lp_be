@@ -17,6 +17,8 @@ const envSchema = z.object({
   // Judge0 CE — code execution
   JUDGE0_BASE_URL: z.string().url().default('https://judge0-ce.p.rapidapi.com'),
   JUDGE0_API_KEY: z.string().optional().default(''),
+  // Gemini AI
+  GEMINI_API_KEY: z.string().optional().default(''),
 });
 
 

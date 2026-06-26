@@ -56,5 +56,39 @@ export const loginUser = async (data) => {
     },
     token,
   };
+};
 
+export const updateEmailUser = async (userId, currentPassword, newEmail) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new ApiError(404, 'User not found');
+
+  const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+  if (!isPasswordValid) throw new ApiError(400, 'Incorrect current password');
+
+  const emailExists = await prisma.user.findUnique({ where: { email: newEmail } });
+  if (emailExists && emailExists.id !== userId) {
+    throw new ApiError(400, 'Email is already in use by another account');
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { email: newEmail }
+  });
+
+  return { id: updatedUser.id, email: updatedUser.email };
+};
+
+export const updatePasswordUser = async (userId, currentPassword, newPassword) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new ApiError(404, 'User not found');
+
+  const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+  if (!isPasswordValid) throw new ApiError(400, 'Incorrect current password');
+
+  const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: hashedNewPassword }
+  });
 };
