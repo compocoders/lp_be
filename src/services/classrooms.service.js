@@ -2,6 +2,7 @@ import { prisma } from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { ApiError } from '../utils/ApiError.js';
 
 //get rooms by code
 export const getRoomsbyCode = async (code) => {
@@ -199,11 +200,30 @@ export const generateInviteToken = async (classroomId, requestingUserId) => {
     return token;
 }
 
-// Join a room using an invite token
+// Join a room using an invite token or room code
 export const joinRoomWithToken = async (token, userId, roompassword) => {
     try {
-        const decoded = jwt.verify(token, env.JWT_SECRET);
-        const classroomId = decoded.classroomId;
+        let classroomId;
+        
+        try {
+            // Try as JWT invite link
+            const decoded = jwt.verify(token, env.JWT_SECRET);
+            classroomId = decoded.classroomId;
+        } catch (jwtErr) {
+            // Fallback to raw room code
+            const roomByCode = await prisma.classroom.findUnique({
+                where: { roomCode: token }
+            });
+            if (roomByCode) {
+                classroomId = roomByCode.id;
+            } else {
+                if (jwtErr.name === 'TokenExpiredError') {
+                    throw new ApiError(400, 'Invite link has expired');
+                } else {
+                    throw new ApiError(400, 'Invalid invite link or room code');
+                }
+            }
+        }
 
         // Fetch room details and check membership concurrently for efficiency
         const [room, existingMember] = await Promise.all([
@@ -211,24 +231,24 @@ export const joinRoomWithToken = async (token, userId, roompassword) => {
             prisma.classroomUser.findFirst({ where: { classroomId, userId } })
         ]);
 
-        if (!room) throw new Error('Room not found');
-        if (room.status === 'DELETED') throw new Error('This class is no longer available');
+        if (!room) throw new ApiError(404, 'Room not found');
+        if (room.status === 'DELETED') throw new ApiError(400, 'This class is no longer available');
 
         if (existingMember) {
-            throw new Error('You already joined this room');
+            throw new ApiError(400, 'You already joined this room');
         }
 
         if (room.private) {
             if (!room.roompassword) {
-                throw new Error('This room is private but has no password set. Contact the administrator.');
+                throw new ApiError(400, 'This room is private but has no password set. Contact the administrator.');
             }
             if (!roompassword) {
-                throw new Error('Room password is required to join a private room');
+                throw new ApiError(400, 'Room password is required to join a private room');
             }
             
             const passwordMatch = await bcrypt.compare(roompassword, room.roompassword);
             if (!passwordMatch) {
-                throw new Error('Incorrect room password');
+                throw new ApiError(400, 'Incorrect room password');
             }
         }
 
@@ -242,12 +262,8 @@ export const joinRoomWithToken = async (token, userId, roompassword) => {
 
         return newMember;
     } catch (err) {
-        if (err.name === 'TokenExpiredError') {
-            throw new Error('Invite link has expired');
-        } else if (err.name === 'JsonWebTokenError') {
-            throw new Error('Invalid invite link');
-        } else if (err.code === 'P2002') {
-            throw new Error('You already joined this room');
+        if (err.code === 'P2002') {
+            throw new ApiError(400, 'You already joined this room');
         }
         throw err;
     }

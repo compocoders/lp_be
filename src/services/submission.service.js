@@ -157,6 +157,7 @@ export const getAllSubmissions = async (activityId, teacherId, { page = 1, limit
         Student: {
           select: {
             id: true,
+            email: true,
             profile: { select: { firstName: true, lastName: true, profilePicture: true } },
           },
         },
@@ -220,8 +221,27 @@ export const gradeSubmission = async (submissionId, teacherId, { answers: graded
   }
 
   // Recalculate total score (may mark as 'graded' if all answers now have scores)
-  const updated = await recalculateTotalScore(submissionId);
-  return updated;
+  await recalculateTotalScore(submissionId);
+
+  // Return the fully populated submission for the frontend
+  return prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: {
+      Student: {
+        select: {
+          id: true,
+          email: true,
+          profile: { select: { firstName: true, lastName: true, profilePicture: true } },
+        },
+      },
+      answers: {
+        include: {
+          Question: { select: { id: true, content: true, questionType: true, points: true, order: true } },
+        },
+        orderBy: { Question: { order: 'asc' } },
+      },
+    },
+  });
 };
 
 // ─── Gradebook ────────────────────────────────────────────────────────────────
@@ -239,9 +259,9 @@ export const getClassroomGradebook = async (classroomId, teacherId) => {
     throw new ApiError(403, 'Only the classroom owner can access the gradebook');
   }
 
-  // Get all students in the classroom
+  // Get all users in the classroom (including teachers who might have submitted tests)
   const students = await prisma.classroomUser.findMany({
-    where: { classroomId, role: { not: 'OWNER' } },
+    where: { classroomId },
     include: {
       User: {
         select: {

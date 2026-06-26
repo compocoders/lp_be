@@ -70,6 +70,13 @@ const answerContentSchema = z.union([
   z.object({ fileUrl: z.string().url() }),
   // Spreadsheet
   z.object({ spreadsheetData: z.array(z.unknown()) }),
+  // Frontend UI problem
+  z.object({ 
+    html: z.string().optional(), 
+    css: z.string().optional(), 
+    js: z.string().optional(), 
+    cssFramework: z.string().optional() 
+  }),
 ]);
 
 const submitActivitySchema = z.object({

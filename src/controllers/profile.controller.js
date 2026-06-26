@@ -22,9 +22,22 @@ export const createProfile = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
     try {
         let fileUrl = null;
+        let oldFileUrl = null;
+
+        // Fetch existing profile to get the old profilePicture URL
+        const existingProfile = await profileService.getProfile(req.user.id);
+        if (existingProfile) {
+            oldFileUrl = existingProfile.profilePicture;
+        }
+
         if (req.file) {
             const uploadResult = await s3Service.uploadProfilePicture(req.file);
             fileUrl = uploadResult.fileUrl;
+            
+            // Delete the old profile picture if a new one is successfully uploaded
+            if (oldFileUrl) {
+                await s3Service.deleteFile(oldFileUrl);
+            }
         }
 
         const profileData = { ...req.body };

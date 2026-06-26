@@ -7,6 +7,7 @@ import classroomRoutes from './classroom.routes.js';
 import learningMaterialRoutes from './learningMaterials.routes.js';
 import activityRoutes from './activity.routes.js';
 import compilerRoutes from './compiler.routes.js';
+import aiRoutes from './ai.routes.js';
 
 const router = Router();
 
@@ -24,6 +25,12 @@ router.use('/', activityRoutes);
 
 // Code Execution (Judge0 proxy)
 router.use('/compiler', compilerRoutes);
+
+import aiStudioRoutes from './aiStudio.routes.js';
+
+// AI Features
+router.use('/ai', aiRoutes);
+router.use('/studio', aiStudioRoutes);
 
 export default router;
 
