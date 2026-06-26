@@ -1,6 +1,6 @@
 import { prisma } from '../config/db.js';
 
-const DAILY_TOKEN_LIMIT = 500;
+const DAILY_TOKEN_LIMIT = 50000;
 
 /**
  * Returns midnight of the next day in local server time as a UTC ISO string.

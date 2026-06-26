@@ -96,7 +96,7 @@ CRITICAL INSTRUCTION: Write the response entirely in plain, natural human text. 
 
 Student's Question: ${message}
 
-Answer the student's question based ONLY on the context document provided. If the answer is not in the document, say "I cannot find the answer in the provided material."`;
+Answer the student's question based ONLY on the context document or image provided in this prompt. If the answer cannot be found in the provided text or image, say "I cannot find the answer in the provided material."`;
 
         if (extractedText) {
             const textStr = typeof extractedText === 'string' ? extractedText : String(extractedText);
