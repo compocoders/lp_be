@@ -33,6 +33,21 @@ export const getDashboardData = async (userId) => {
                                     }
                                 }
                             }
+                        },
+                        activities: {
+                            where: { status: 'published' },
+                            select: {
+                                id: true,
+                                title: true,
+                                deadline: true,
+                                submissions: {
+                                    where: { studentId: userId },
+                                    select: { id: true }
+                                }
+                            },
+                            orderBy: {
+                                deadline: 'asc'
+                            }
                         }
                     }
                 }

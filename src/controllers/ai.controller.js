@@ -1,4 +1,5 @@
 import { getFlashModel, getProModel, calculateVirtualTokens, generateContentWithRetry } from '../services/ai.service.js';
+import { SPREADSHEET_TEMPLATES } from '../utils/spreadsheetTemplates.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -129,75 +130,167 @@ Answer the student's question based ONLY on the context document or image provid
 
 export const generateActivity = async (req, res, next) => {
     try {
-        const { topic, gradeLevel, type = 'quiz', additionalInstructions = '' } = req.body;
+        const {
+            topic, gradeLevel, type = 'quiz', additionalInstructions = '',
+            cssFramework = 'native', codingLanguage = 'javascript',
+            difficulty = 'intermediate',
+            quizCount = 5, quizType = 'multiple_choice',
+            problemCount = 3,
+            wordCount = 300,
+            spreadsheetColumns = 4, spreadsheetTask = 'mixed',
+        } = req.body;
         
         const model = getFlashModel();
-        let prompt = `You are an expert curriculum designer.
-        Generate a ${type} for grade level ${gradeLevel} about the topic: "${topic}".
-        ${additionalInstructions ? `Additional Teacher Instructions: "${additionalInstructions}"` : ''}\n`;
+
+        // ─── Shared system context ───────────────────────────────────────────────
+        // This prompt establishes the app context so the AI never mentions CDNs,
+        // installation steps, or any sign that the content was AI-generated.
+        const systemContext = `You are a curriculum designer writing activities directly inside a learning platform called Likhâ.
+The platform automatically handles all framework CDNs, dependencies, and tooling — students never install anything themselves.
+NEVER mention: CDN links, npm, yarn, script tags, link tags, installation instructions, "via CDN", "from CDN", or any setup steps.
+NEVER use phrases like "AI-generated", "as an AI", "I generated", "here is", "certainly", "sure", or any filler opener.
+NEVER use Markdown formatting (no **, ##, *, \`\`\`, etc.) inside content strings.
+Write instructions in a direct, professional tone exactly as a teacher would write them — clear, concise, and action-oriented.
+${additionalInstructions ? `Teacher's additional instructions: "${additionalInstructions}"` : ''}`;
+
+        let prompt = `${systemContext}
+
+Generate a ${type} activity for grade level: ${gradeLevel}
+Topic: "${topic}"
+
+FORMATTING RULES:
+- Write the \`content\` field entirely in plain text.
+- DO NOT use markdown bolding (like **text**) or italics.
+- Use standard dashes (-) or numbers for bulleted lists.
+- Use properly escaped newlines (\\n\\n) to separate paragraphs. DO NOT use literal unescaped line breaks inside the JSON strings.
+- DO NOT output a single dense paragraph.
+
+`;
 
         if (type === 'CODING') {
-            prompt += `CRITICAL INSTRUCTION: You MUST return a JSON array with exactly one object in this format:
+            const langNames = { javascript: 'JavaScript', python: 'Python', java: 'Java', cpp: 'C++' };
+            const langDisplay = langNames[codingLanguage] || codingLanguage;
+            const langComment = codingLanguage === 'python' ? '#' : '//';
+            prompt += `Return a JSON array with exactly one object:
 [
   {
     "id": "1",
     "questionType": "coding_problem",
-    "content": "Clear problem statement and instructions here...",
+    "content": "Write a clear, step-by-step ${difficulty}-level problem statement as a teacher would give it. Describe what the student must build or solve, expected inputs/outputs, and any constraints. Do NOT mention the language or environment.",
     "points": 100,
     "config": {
-      "language": "javascript",
-      "starterCode": "// Free example code for the student to start with based on the topic...",
+      "language": "${codingLanguage}",
+      "starterCode": "${langComment} ${difficulty === 'easy' ? 'Beginner-friendly starter code' : difficulty === 'hard' ? 'Advanced starter code with some structure provided' : 'Intermediate starter code'} in ${langDisplay}. Include function signatures, class templates, or data structure scaffolding appropriate to the difficulty.",
       "expectedOutput": ""
     }
   }
 ]
-Do not wrap in markdown, just return raw JSON.`;
+Generate the starterCode in ${langDisplay}. Follow ${langDisplay} syntax exactly. Difficulty: ${difficulty}.
+Return raw JSON only. No markdown fences.`;
+
         } else if (type === 'SPREADSHEET') {
-            prompt += `CRITICAL INSTRUCTION: You MUST return a JSON array with exactly one object in this format:
+            const businessTypes = ['balance_sheet', 'income_statement', 'cash_flow', 't_account', 'trial_balance', 'journal_entries', 'budget', 'inventory'];
+            const isBusinessTask = businessTypes.includes(spreadsheetTask);
+
+            const taskDescriptions = {
+                formulas:          'formula-based tasks using SUM, AVERAGE, IF, VLOOKUP, and other spreadsheet functions',
+                charts:            'data entry and analysis that would feed into charts or graphs',
+                data_entry:        'structured data entry and record-keeping',
+                mixed:             'mixed tasks combining data entry, formulas, and analysis',
+                balance_sheet:     'a Balance Sheet showing Assets, Liabilities, and Owner\'s Equity',
+                income_statement:  'an Income Statement showing Revenues, Expenses, and Net Income',
+                cash_flow:         'a Cash Flow Statement with Operating, Investing, and Financing activities',
+                t_account:         'a T-Account ledger showing Debit and Credit entries',
+                trial_balance:     'a Trial Balance listing all accounts with their Debit or Credit balances',
+                journal_entries:   'a General Journal with dated accounting entries showing Debits and Credits',
+                budget:            'a Budget Plan comparing Budgeted vs Actual amounts with Variance',
+                inventory:         'an Inventory Ledger tracking Units In, Units Out, and Balance',
+            };
+            const taskDesc = taskDescriptions[spreadsheetTask] || 'mixed spreadsheet tasks';
+
+            let colHeaders, emptyRow, businessInstruction;
+
+            if (isBusinessTask) {
+                const templateStr = JSON.stringify(SPREADSHEET_TEMPLATES[spreadsheetTask]);
+                businessInstruction = `
+IMPORTANT: This is a ${taskDesc} task. The student will be provided with this EXACT spreadsheet template:
+${templateStr}
+
+Your job is to write the \`content\` (the task description). You MUST provide a realistic scenario and all the raw numbers (e.g. "Cash is ₱50,000", "Sales Revenue is ₱120,000") directly in the \`content\` text, so the student can read your instructions and fill out the provided template. DO NOT invent account names that aren't in the template. Present the raw data clearly using bullet points.`;
+            } else {
+                const colCount = Number(spreadsheetColumns) || 4;
+                colHeaders = Array.from({ length: colCount }, (_, i) => `{"value": "Column ${String.fromCharCode(65 + i)}"}`).join(', ');
+                emptyRow   = Array.from({ length: colCount }, () => `{"value": ""}`).join(', ');
+                businessInstruction = `Populate starterData with realistic, topic-relevant headers and sample values.`;
+            }
+
+            prompt += `Return a JSON array with exactly one object:
 [
   {
     "id": "1",
     "questionType": "spreadsheet_problem",
-    "content": "Clear instructions on what data to input or formulas to use...",
+    "content": "Write a clear task description providing the student with all the raw numbers and data they need to fill out the spreadsheet.",
     "points": 100,
     "config": {
-      "starterData": [
-        [{"value": "Header 1"}, {"value": "Header 2"}, {"value": "Header 3"}, {"value": "Header 4"}],
-        [{"value": ""}, {"value": ""}, {"value": ""}, {"value": ""}],
-        [{"value": ""}, {"value": ""}, {"value": ""}, {"value": ""}]
-      ]
+      "starterData": ${isBusinessTask ? "[]" : `[
+        [${colHeaders}],
+        [${emptyRow}],
+        [${emptyRow}],
+        [${emptyRow}]
+      ]`}
     }
   }
 ]
-Do not wrap in markdown, just return raw JSON.`;
+${businessInstruction}
+Task type: ${spreadsheetTask}.
+Return raw JSON only. No markdown fences.`;
+
+
         } else if (type === 'FRONTEND') {
-            prompt += `CRITICAL INSTRUCTION: You MUST return a JSON array with exactly one object in this format:
+            const frameworkContext = cssFramework === 'tailwind'
+                ? 'The student writes HTML using Tailwind CSS utility classes. The Tailwind framework is already active — they just use classes directly in HTML. starterCss should be empty unless absolutely necessary.'
+                : cssFramework === 'bootstrap'
+                ? 'The student writes HTML using Bootstrap 5 component classes (container, row, col, btn, card, etc.). Bootstrap is already active — they just use classes in HTML. starterCss should be empty unless custom overrides are needed.'
+                : 'The student writes plain HTML and CSS. All styling goes in starterCss using regular CSS rules.';
+            const difficultyNote = difficulty === 'beginner'
+                ? 'Keep the UI simple: 1-2 components, basic layout, minimal interaction.'
+                : difficulty === 'advanced'
+                ? 'Design a complex UI with multiple sections, responsiveness, and interactive JavaScript behavior.'
+                : 'Design a moderate UI with a few components and basic interactivity.';
+
+            prompt += `Return a JSON array with exactly one object:
 [
   {
     "id": "1",
     "questionType": "frontend_problem",
-    "content": "Clear instructions on what UI to build...",
+    "content": "Write a clear, numbered list of UI requirements for a ${difficulty}-level task, exactly as a teacher would assign them. Describe layout, components, colors, and interactions. Do NOT mention the framework, CDN, or setup.",
     "points": 100,
     "config": {
-      "cssFramework": "native",
-      "starterHtml": "<!-- free example HTML to start -->",
-      "starterCss": "/* free example CSS to start */",
-      "starterJs": "// free example JS to start"
+      "cssFramework": "${cssFramework}",
+      "starterHtml": "<!-- Meaningful ${difficulty}-level starter HTML for ${cssFramework === 'tailwind' ? 'Tailwind CSS' : cssFramework === 'bootstrap' ? 'Bootstrap 5' : 'plain HTML/CSS'} -->",
+      "starterCss": "${cssFramework === 'tailwind' ? '' : '/* Add your CSS styles here */'}",
+      "starterJs": "// Add JavaScript here (optional)"
     }
   }
 ]
-Do not wrap in markdown, just return raw JSON.`;
+Framework: ${frameworkContext}
+Difficulty: ${difficulty}. ${difficultyNote}
+Make starterHtml genuinely useful for the student to start immediately.
+Return raw JSON only. No markdown fences.`;
+
         } else if (type === 'QUIZ') {
-            let maxQs = 5;
-            if (req.tokenWallet && req.tokenWallet.availableTokens) {
-                maxQs = Math.max(1, Math.min(10, Math.floor(req.tokenWallet.availableTokens / 80)));
-            }
-            prompt += `CRITICAL INSTRUCTION: You MUST return a JSON array of EXACTLY ${maxQs} short questions in this format:
+            const count = Math.min(20, Math.max(1, Number(quizCount) || 5));
+            const qtNote = quizType === 'true_false'
+                ? 'ALL questions must be True/False. Use "questionType": "multiple_choice" with exactly 2 options: {"id":"opt-1","text":"True"} and {"id":"opt-2","text":"False"}.'
+                : quizType === 'mixed'
+                ? 'Mix multiple-choice (4 options) and true/false (2 options: True/False) questions roughly equally.'
+                : 'ALL questions must be multiple_choice with exactly 4 options each.';
+            prompt += `Return a JSON array of exactly ${count} questions. Difficulty: ${difficulty}.
 [
   {
     "id": "1",
     "questionType": "multiple_choice",
-    "content": "Short question text here",
+    "content": "Question text — concise, max 1 sentence, ${difficulty} level",
     "points": 10,
     "options": [
       { "id": "opt-1", "text": "Option A" },
@@ -208,25 +301,100 @@ Do not wrap in markdown, just return raw JSON.`;
     "correctAnswer": "opt-2"
   }
 ]
-CRITICAL INSTRUCTION: Keep the questions and options extremely brief (1 sentence max per question) to minimize token usage. Do not wrap in markdown, just return raw JSON.`;
+${qtNote}
+Keep each question and all options brief (1 sentence max). Return raw JSON only. No markdown fences.`;
+
         } else if (type === 'PROBLEM_SET') {
-            prompt += `CRITICAL INSTRUCTION: You MUST return a JSON array of 3-5 problems in this format:
+            const count = Math.min(10, Math.max(2, Number(problemCount) || 3));
+            const pts = Math.round(100 / count);
+            prompt += `Return a JSON array of exactly ${count} problems. Difficulty: ${difficulty}.
 [
   {
     "id": "1",
     "questionType": "short_answer",
-    "content": "Problem statement or question here",
-    "points": 10
+    "content": "Problem statement written as a teacher would phrase it — ${difficulty} level, direct, clear, actionable.",
+    "points": ${pts}
   }
 ]
-Do not wrap in markdown, just return raw JSON.`;
+Return raw JSON only. No markdown fences.`;
+
+        } else if (type === 'ESSAY') {
+            prompt += `Return a JSON array with exactly one essay prompt:
+[
+  {
+    "id": "1",
+    "questionType": "essay",
+    "content": "Write a rich, thought-provoking essay prompt a teacher would give at the ${difficulty === 'easy' ? 'introductory' : difficulty === 'hard' ? 'advanced' : 'intermediate'} level. Include the main question, perspective to explore, and requirements: target word count of ${wordCount} words, expected structure (introduction, body, conclusion), and any specific evaluation criteria.",
+    "points": 100
+  }
+]
+Return raw JSON only. No markdown fences.`;
+
+        } else if (type === 'CASE_STUDY') {
+            const complexityNote = difficulty === 'simple'
+                ? 'Keep the scenario short and straightforward with 1-2 focused questions.'
+                : difficulty === 'complex'
+                ? 'Write a detailed multi-paragraph scenario with 3-4 deep analytical questions.'
+                : 'Write a moderate scenario with 2-3 analytical questions.';
+            prompt += `Return a JSON array with exactly one case study:
+[
+  {
+    "id": "1",
+    "questionType": "essay",
+    "content": "Write a realistic, believable scenario description followed by analysis questions. ${complexityNote} Frame questions so students must apply critical thinking.",
+    "points": 100
+  }
+]
+Return raw JSON only. No markdown fences.`;
+
+        } else if (type === 'PRESENTATION') {
+            prompt += `Return a JSON array with exactly one file submission prompt:
+[
+  {
+    "id": "1",
+    "questionType": "file_upload",
+    "content": "Write a clear submission brief a teacher would give. Describe what the student should create and submit — topic, required sections, format expectations (slides, pages, etc.), and evaluation criteria.",
+    "points": 100
+  }
+]
+Return raw JSON only. No markdown fences.`;
+
         } else {
-            prompt += `CRITICAL INSTRUCTION: Write the response entirely in plain, natural human text. DO NOT use any Markdown formatting. DO NOT use asterisks (*), hashes (#), or any special formatting symbols. Use natural paragraph spacing.`;
+            prompt += `Write the activity content in plain, direct prose exactly as a teacher would write it. No markdown, no filler phrases.`;
+        }
+
+        if (prompt.includes('JSON array')) {
+            prompt += `\n\nCRITICAL: Instead of returning just the array, you MUST WRAP your final JSON array inside a root object that provides a creative, AI-generated title based on the topic (max 6 words). Exactly like this format:
+{
+  "title": "Your Creative Title Here",
+  "questions": [ ... your generated array of objects here ... ]
+}
+Make sure you return exactly this JSON structure.`;
         }
 
         const result = await generateContentWithRetry(model, prompt, req.tokenWallet);
-        const responseText = result.response.text();
+        let responseText = result.response.text();
         
+        // Post-process spreadsheet business tasks to ensure the exact template is used
+        const businessTypes = ['balance_sheet', 'income_statement', 'cash_flow', 't_account', 'trial_balance', 'journal_entries', 'budget', 'inventory'];
+        if (type === 'SPREADSHEET' && businessTypes.includes(spreadsheetTask)) {
+            try {
+                let cleanJson = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(cleanJson);
+                
+                let targetArray = null;
+                if (Array.isArray(parsed)) targetArray = parsed;
+                else if (parsed.questions && Array.isArray(parsed.questions)) targetArray = parsed.questions;
+
+                if (targetArray && targetArray[0]?.config) {
+                    targetArray[0].config.starterData = SPREADSHEET_TEMPLATES[spreadsheetTask];
+                    responseText = JSON.stringify(parsed, null, 2);
+                }
+            } catch (err) {
+                console.error("Failed to post-process spreadsheet template", err);
+            }
+        }
+
         const tokensToDeduct = calculateVirtualTokens(result.response.usageMetadata);
         await req.tokenWallet.deductTokens(tokensToDeduct);
 
@@ -403,7 +571,7 @@ export const getTokenInfo = async (req, res, next) => {
             select: { virtualTokens: true, lastTokenReset: true }
         });
         
-        let tokens = user ? user.virtualTokens : 500;
+        let tokens = user ? user.virtualTokens : 50000;
         
         if (user) {
             const now = new Date();
@@ -414,7 +582,7 @@ export const getTokenInfo = async (req, res, next) => {
               lastReset.getFullYear() !== now.getFullYear();
               
             if (isDifferentDay) {
-                tokens = 500;
+                tokens = 50000;
             }
         }
         

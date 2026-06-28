@@ -1,80 +1,68 @@
 import { ApiError } from '../utils/ApiError.js';
-import { exec } from 'child_process';
-import { writeFile, unlink } from 'fs/promises';
-import path from 'path';
-import os from 'os';
-import { randomUUID } from 'crypto';
-import util from 'util';
 
-const execAsync = util.promisify(exec);
-
-// ─── Local Code Execution (Free & Open Source) ────────────────────────────────
-// Instead of an external API, we run the code directly on the server using 
-// standard installed compilers/interpreters. 
-// Note: Ensure Node.js and Python are installed on the host machine.
+// ─── Remote Code Execution (Judge0 API) ──────────────────────────────────────
+// Uses the free public Judge0 CE API for secure, isolated code execution supporting many languages.
 export const SUPPORTED_LANGUAGES = {
-  javascript: 'node',
-  python: 'python', // Standard command on Windows
+  javascript: { language_id: 63 }, // Node.js
+  python: { language_id: 71 }, // Python 3
+  java: { language_id: 62 }, // Java
+  'c++': { language_id: 54 }, // C++ (GCC)
+  c: { language_id: 50 }, // C (GCC)
 };
 
 /**
- * Execute source code locally with a strict timeout.
+ * Execute source code remotely via Judge0 API.
  */
 export const runCode = async ({ language, sourceCode, stdin = '' }) => {
   const normalizedLang = language?.toLowerCase();
-  const cmd = SUPPORTED_LANGUAGES[normalizedLang];
+  const langConfig = SUPPORTED_LANGUAGES[normalizedLang];
   
-  if (!cmd) {
-    throw new ApiError(400, `Unsupported language for local execution. Supported: ${Object.keys(SUPPORTED_LANGUAGES).join(', ')}`);
+  if (!langConfig) {
+    throw new ApiError(400, `Unsupported language for execution. Supported: ${Object.keys(SUPPORTED_LANGUAGES).join(', ')}`);
   }
 
-  // 1. Create a secure temporary file
-  const ext = normalizedLang === 'javascript' ? 'js' : 'py';
-  const fileName = `exec_${randomUUID()}.${ext}`;
-  const filePath = path.join(os.tmpdir(), fileName);
-
   try {
-    // 2. Write the student's code to the file
-    await writeFile(filePath, sourceCode);
+    const response = await fetch('https://ce.judge0.com/submissions?base64_encoded=false&wait=true', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        language_id: langConfig.language_id,
+        source_code: sourceCode,
+        stdin: stdin || "",
+      })
+    });
 
-    // 3. Execute the file with a strict 5-second timeout to prevent infinite loops
-    let command = `"${cmd}" "${filePath}"`;
-
-    // Note: If stdin is provided, we echo it into the command (Windows-friendly approach)
-    if (stdin && stdin.trim() !== '') {
-      // Escape quotes for Windows CMD
-      const safeStdin = stdin.replace(/"/g, '\\"');
-      command = `echo "${safeStdin}" | ${command}`;
+    if (!response.ok) {
+      // Judge0 returns 422 if Unprocessable Entity
+      if (response.status === 422) {
+        throw new Error('Invalid code payload.');
+      }
+      throw new Error(`Execution API Error: ${response.statusText}`);
     }
 
-    const { stdout, stderr } = await execAsync(command, { timeout: 5000 });
-
-    return {
-      status: 'accepted',
-      stdout: stdout || '',
-      stderr: stderr || '',
-      compileOutput: '',
-      success: true,
-    };
-
-  } catch (error) {
-    // child_process.exec throws an error if the process exits with a non-zero code or times out
-    const isTimeout = error.killed;
+    const data = await response.json();
     
+    // Status ID 3 means Accepted. ID 6 means Compilation Error.
+    const isSuccess = data.status?.id === 3;
+    const isCompilationError = data.status?.id === 6;
+
     return {
-      status: isTimeout ? 'time_limit_exceeded' : 'runtime_error',
-      stdout: error.stdout || '',
-      stderr: error.stderr || '',
-      compileOutput: isTimeout ? 'Execution timed out after 5 seconds.' : (error.stderr || error.message),
+      status: isSuccess ? 'accepted' : (isCompilationError ? 'compile_error' : 'runtime_error'),
+      stdout: data.stdout || '',
+      stderr: data.stderr || '',
+      compileOutput: data.compile_output || '',
+      success: isSuccess,
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      stdout: '',
+      stderr: error.message || 'Failed to connect to execution engine.',
+      compileOutput: '',
       success: false,
     };
-  } finally {
-    // 4. Always clean up the temporary file
-    try {
-      await unlink(filePath);
-    } catch (e) {
-      // Ignore unlink errors if file was already deleted
-    }
   }
 };
 

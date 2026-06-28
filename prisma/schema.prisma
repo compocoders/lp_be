@@ -11,7 +11,7 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
-  virtualTokens Int @default(500)
+  virtualTokens Int @default(50000)
   lastTokenReset DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

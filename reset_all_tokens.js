@@ -1,5 +1,5 @@
 import { prisma } from './src/config/db.js';
-const DAILY_TOKEN_LIMIT = 500;
+const DAILY_TOKEN_LIMIT = 50000;
 
 async function main() {
   console.log(`Starting token reset migration...`);
