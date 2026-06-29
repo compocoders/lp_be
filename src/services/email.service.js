@@ -12,8 +12,9 @@ let isGmail = false;
 if (env.SMTP_EMAIL && env.SMTP_PASSWORD) {
   transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false, // true for 465, false for other ports
+    requireTLS: true,
     auth: {
       user: env.SMTP_EMAIL,
       pass: env.SMTP_PASSWORD,
