@@ -1,5 +1,25 @@
+/**
+ * ─── AI Feature Controller ────────────────────────────────────────────────────
+ *
+ * Handles all Gemini AI-powered features:
+ *  - chatWithDocument     → RAG-style Q&A over a learning material file
+ *  - generateActivity     → Creates quiz/coding/essay activities from a topic
+ *  - generateStudyMaterial → Generates notes or a quiz from a learning material
+ *  - gradeWithAI          → AI-assisted grading of a student submission
+ *  - ideaSpark            → Generates creative teaching ideas for a topic
+ *  - getTokenInfo         → Returns the user's current token balance
+ *
+ * ─── Authorization Model ─────────────────────────────────────────────────────
+ * Every endpoint that accesses a learning material or submission MUST verify
+ * that the requesting user has the appropriate role in the relevant classroom:
+ *  - chatWithDocument, generateStudyMaterial → classroom MEMBER (student or teacher)
+ *  - gradeWithAI → classroom OWNER (teacher) or activity creator
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { getFlashModel, getProModel, calculateVirtualTokens, generateContentWithRetry } from '../services/ai.service.js';
 import { SPREADSHEET_TEMPLATES } from '../utils/spreadsheetTemplates.js';
+import { assertClassroomMember } from '../services/activity.service.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -9,90 +29,114 @@ import { prisma } from '../config/db.js';
 import mime from 'mime-types';
 import officeParser from 'officeparser';
 
+/**
+ * Parses a file fetched from S3 into a format suitable for Gemini AI.
+ *
+ * - Images:      Returns an `inlineData` object (base64-encoded) for direct Gemini vision input.
+ * - PDFs:        Extracts text via pdf-parse.
+ * - Office docs: Extracts text via officeparser (supports .docx, .pptx, etc.).
+ * - Plain text:  Reads the raw buffer as a UTF-8 string.
+ *
+ * @param {string} key         — The S3 object key (used to determine file type via extension)
+ * @param {Uint8Array} fileBuffer — The raw file bytes fetched from S3
+ * @returns {{ extractedText: string, inlineData: object|null }}
+ */
 export const parseFileForGemini = async (key, fileBuffer) => {
     const mimeType = mime.lookup(key) || 'application/octet-stream';
-    let extractedText = "";
+    let extractedText = '';
     let inlineData = null;
 
     if (mimeType.startsWith('image/')) {
+        // For images, pass the raw base64 data directly to Gemini's vision model
         inlineData = {
             data: Buffer.from(fileBuffer).toString('base64'),
             mimeType
         };
     } else if (mimeType === 'application/pdf') {
+        // Extract text from PDF using pdf-parse
         try {
             const pdfData = await pdf(Buffer.from(fileBuffer));
             extractedText = pdfData.text;
         } catch (e) {
-            console.error("PDF parse error", e);
+            console.error('PDF parse error', e);
         }
     } else {
+        // Try to extract text from Office documents (.docx, .pptx, etc.)
         try {
             const ext = key.split('.').pop().toLowerCase();
             const parsedData = await officeParser.parseOffice(Buffer.from(fileBuffer), { fileType: ext });
             // officeparser v7+ returns an object with a toText() method
             extractedText = typeof parsedData?.toText === 'function' ? parsedData.toText() : String(parsedData);
-        } catch(e) {
-            console.error("Office parser error", e);
+        } catch (e) {
+            console.error('Office parser error', e);
+            // Fallback: try to read plain text files (e.g., .txt, .csv) as UTF-8
             if (mimeType.startsWith('text/') || mimeType === 'text/csv') {
                 extractedText = Buffer.from(fileBuffer).toString('utf-8');
             }
         }
     }
+
     return { extractedText, inlineData };
 };
 
-// Setup S3 Client to fetch PDFs for RAG
+/**
+ * Shared S3 client for fetching learning material files from Cloudflare R2.
+ * Exported so the AI Studio controller can reuse it without creating a second instance.
+ */
 export const s3Client = new S3Client({
     region: 'auto',
     endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
     },
 });
 
+/**
+ * POST /ai/chat-document
+ *
+ * RAG (Retrieval-Augmented Generation) endpoint: fetches a learning material
+ * from S3, extracts its text, and uses it as context for a Gemini AI chat response.
+ *
+ * Authorization: The requesting user must be a MEMBER of the classroom that
+ * owns the material. This prevents users from querying materials from classrooms
+ * they haven't joined.
+ */
 export const chatWithDocument = async (req, res, next) => {
     try {
         const { message, materialId, modelType = 'flash' } = req.body;
-        
-        if (!message || !materialId) {
-            return res.status(400).json({ error: "Message and materialId are required" });
-        }
 
-        // 1. Fetch material from DB
+        // 1. Fetch the learning material from the database
         const material = await prisma.learningMaterial.findUnique({
             where: { id: materialId }
         });
 
         if (!material) {
-            return res.status(404).json({ error: "Material not found" });
+            return res.status(404).json({ error: 'Material not found' });
         }
 
-        // 2. Fetch file from S3
-        // The fileUrl usually contains the R2_PUBLIC_URL + key. We need to extract the key.
-        const key = material.fileUrl.replace(env.R2_PUBLIC_URL + '/', '');
-        
-        const command = new GetObjectCommand({
-            Bucket: env.R2_BUCKET_NAME,
-            Key: key
-        });
+        // SECURITY: Verify the user is a member of the classroom this material belongs to.
+        // This prevents users from chatting with materials from classrooms they haven't joined.
+        await assertClassroomMember(material.classroomId, req.user.id);
 
+        // 2. Extract the S3 object key from the stored public URL and fetch the file
+        const key = material.fileUrl.replace(env.R2_PUBLIC_URL + '/', '');
+        const command = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key });
         const s3Response = await s3Client.send(command);
         const fileBuffer = await s3Response.Body.transformToByteArray();
 
-        // 3. Parse file
+        // 3. Parse the file into text or image data for Gemini
         const { extractedText, inlineData } = await parseFileForGemini(key, fileBuffer);
 
         if (!extractedText && !inlineData) {
-            return res.status(400).json({ error: "Could not parse document text. Unsupported format." });
+            return res.status(400).json({ error: 'Could not parse document text. Unsupported format.' });
         }
 
-        // 4. Send to Gemini
+        // 4. Build the prompt with the extracted document as context
         const model = modelType === 'pro' ? getProModel() : getFlashModel();
-        
+
         let prompt = `You are a helpful AI tutor for a learning platform. Be direct, concise, and to the point. Do not use filler words unless necessary.
-        
+
 CRITICAL INSTRUCTION: Write the response entirely in plain, natural human text. DO NOT use any Markdown formatting. DO NOT use asterisks (*), hashes (#), or any special formatting symbols. Use natural paragraph spacing.
 
 Student's Question: ${message}
@@ -100,19 +144,21 @@ Student's Question: ${message}
 Answer the student's question based ONLY on the context document or image provided in this prompt. If the answer cannot be found in the provided text or image, say "I cannot find the answer in the provided material."`;
 
         if (extractedText) {
+            // Trim to 30,000 chars to stay within safe token limits
             const textStr = typeof extractedText === 'string' ? extractedText : String(extractedText);
             prompt += `\n\nContext Document:\n"""\n${textStr.substring(0, 30000)}\n"""`;
         }
 
         const parts = [];
-        if (inlineData) parts.push({ inlineData });
+        if (inlineData) parts.push({ inlineData }); // Include image for vision-capable models
         parts.push({ text: prompt });
 
+        // 5. Call Gemini AI (with exponential backoff retry logic)
         const result = await generateContentWithRetry(model, parts, req.tokenWallet);
         const responseText = result.response.text();
         const usageMetadata = result.response.usageMetadata;
 
-        // 5. Deduct tokens
+        // 6. Deduct tokens from the user's daily wallet based on actual usage
         const tokensToDeduct = calculateVirtualTokens(usageMetadata);
         await req.tokenWallet.deductTokens(tokensToDeduct);
 
@@ -123,11 +169,21 @@ Answer the student's question based ONLY on the context document or image provid
         });
 
     } catch (error) {
-        console.error("Chat with doc error:", error);
+        console.error('Chat with doc error:', error);
         next(error);
     }
 };
 
+/**
+ * POST /ai/generate-activity
+ *
+ * Generates a structured activity (quiz, coding problem, essay, etc.) for a
+ * given topic and grade level. The generated content is returned as JSON that
+ * the frontend uses to pre-fill the activity creation form.
+ *
+ * Authorization: Any authenticated user with sufficient tokens can generate
+ * activity content (the classroom membership check happens at activity creation time).
+ */
 export const generateActivity = async (req, res, next) => {
     try {
         const {
@@ -408,16 +464,27 @@ Make sure you return exactly this JSON structure.`;
     }
 };
 
+/**
+ * POST /ai/generate-study-material
+ *
+ * Generates AI study materials (notes or a practice quiz) based on the content
+ * of a specific learning material document.
+ *
+ * Authorization: The requesting user must be a MEMBER of the classroom that
+ * owns the material. This prevents users from generating content from materials
+ * in classrooms they haven't joined.
+ */
 export const generateStudyMaterial = async (req, res, next) => {
     try {
         const { materialId, type } = req.body; // type = 'quiz' or 'notes'
-        
-        if (!materialId || !type) {
-            return res.status(400).json({ error: "MaterialId and type are required" });
-        }
 
+        // 1. Fetch the learning material
         const material = await prisma.learningMaterial.findUnique({ where: { id: materialId } });
-        if (!material) return res.status(404).json({ error: "Material not found" });
+        if (!material) return res.status(404).json({ error: 'Material not found' });
+
+        // SECURITY: Verify the user is a member of the classroom this material belongs to.
+        // This prevents users from generating study materials from classrooms they haven't joined.
+        await assertClassroomMember(material.classroomId, req.user.id);
 
         const key = material.fileUrl.replace(env.R2_PUBLIC_URL + '/', '');
         const command = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key });
@@ -462,20 +529,44 @@ export const generateStudyMaterial = async (req, res, next) => {
     }
 };
 
+/**
+ * POST /ai/grade-submission
+ *
+ * Uses Gemini AI to suggest scores and feedback for each answer in a student
+ * submission. Returns a grading recommendation that the teacher can accept or
+ * adjust — it does NOT automatically apply the grades.
+ *
+ * Authorization: Only the activity CREATOR or the classroom OWNER (teacher)
+ * can request AI grading. Students cannot grade their own submissions.
+ */
 export const gradeWithAI = async (req, res, next) => {
     try {
         const { submissionId } = req.body;
-        if (!submissionId) return res.status(400).json({ error: "submissionId is required" });
 
+        // 1. Fetch the submission with its activity, questions, and answers
         const submission = await prisma.submission.findUnique({
             where: { id: submissionId },
-            include: { 
+            include: {
                 Activity: { include: { questions: true } },
                 answers: true
             }
         });
 
-        if (!submission) return res.status(404).json({ error: "Submission not found" });
+        if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+        // SECURITY: Only the activity creator or classroom owner can use AI grading.
+        // Students must not be able to AI-grade their own submissions.
+        const activity = submission.Activity;
+        if (activity.createdBy !== req.user.id) {
+            const member = await prisma.classroomUser.findUnique({
+                where: { classroomId_userId: { classroomId: activity.classroomId, userId: req.user.id } }
+            });
+            if (!member || member.role !== 'OWNER') {
+                return res.status(403).json({
+                    error: 'Only the activity creator or classroom owner can use AI-assisted grading'
+                });
+            }
+        }
 
         // Construct grading prompt
         let promptText = `You are an expert Teacher's Grading Assistant. You must be direct and concise.
@@ -531,6 +622,14 @@ Respond STRICTLY in the following JSON format:
     }
 };
 
+/**
+ * POST /ai/idea-spark
+ *
+ * Generates creative teaching ideas for a given topic: hook ideas, activity
+ * suggestions, and discussion questions. Useful for teacher brainstorming.
+ *
+ * Authorization: Any authenticated user with sufficient tokens can use this.
+ */
 export const ideaSpark = async (req, res, next) => {
     try {
         const { topic } = req.body;
@@ -564,6 +663,13 @@ CRITICAL INSTRUCTION: Write the response entirely in plain, natural human text. 
 
 import { getNextMidnight } from '../middlewares/token.middleware.js';
 
+/**
+ * GET /ai/token-info
+ *
+ * Returns the authenticated user's current token balance and the time at
+ * which their daily token quota will next reset. Does NOT deduct tokens.
+ * Used by the frontend to display the token counter in the UI.
+ */
 export const getTokenInfo = async (req, res, next) => {
     try {
         const user = await prisma.user.findUnique({

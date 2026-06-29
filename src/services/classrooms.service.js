@@ -1,3 +1,11 @@
+/**
+ * ─── Classrooms Service ───────────────────────────────────────────────────────
+ *
+ * This service handles all business logic related to classrooms.
+ * Including creation, deletion, inviting users, and fetching classrooms.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { prisma } from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -46,18 +54,7 @@ export const getRoomsbyCode = async (code) => {
     return rooms;
 }
 
-//create room links
-export const roomLink = async (code) => {
 
-    const room = await prisma.classroom.findUnique({
-        where: {
-            roomCode: code,
-        }
-    });
-    if (!room) throw new Error('No room found with the provided code');
-    if(room.status === 'DELETED') throw new Error('This class is not available');
-    return room;
-}
 
 
 //get rooms by user id

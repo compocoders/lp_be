@@ -1,3 +1,13 @@
+/**
+ * ─── AI Service ───────────────────────────────────────────────────────────────
+ *
+ * This service handles communication with the Google Generative AI (Gemini) API.
+ * It provides utility functions for estimating token counts and wrapping
+ * generation requests with exponential backoff and fallback models to
+ * gracefully handle rate limits or service overloads.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';

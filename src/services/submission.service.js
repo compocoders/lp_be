@@ -1,3 +1,12 @@
+/**
+ * ─── Submission Service ───────────────────────────────────────────────────────
+ *
+ * This service handles all logic related to student submissions for activities,
+ * including auto-grading multiple choice answers, fetching grades, and 
+ * managing teacher gradebook views.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { prisma } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 import {

@@ -1,3 +1,11 @@
+/**
+ * ─── Profile Service ─────────────────────────────────────────────────────────
+ *
+ * This service handles all business logic related to user profiles,
+ * including creation, updates, and fetching profile data.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { prisma } from '../config/db.js';
 
 const checkProfileExists = async (userId) => {
@@ -54,5 +62,4 @@ export {
     updateProfile,
     getProfile,
     getProfileById,
-    checkProfileExists,
 };

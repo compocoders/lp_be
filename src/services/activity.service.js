@@ -1,9 +1,16 @@
+/**
+ * ─── Activity Service ────────────────────────────────────────────────────────
+ *
+ * This service handles the core business logic for activities (quizzes, coding
+ * problems, etc.) including creation, fetching, updating, and auto-grading.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { prisma } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 
 // ─── Allowed values (kept in one place so validation and logic stay in sync) ──
 export const ACTIVITY_TYPES = ['QUIZ', 'CODING', 'FRONTEND', 'SPREADSHEET', 'ESSAY', 'PROBLEM_SET', 'PRESENTATION', 'CASE_STUDY'];
-export const ACTIVITY_STATUSES = ['draft', 'published', 'closed'];
 export const QUESTION_TYPES = [
   'multiple_choice',
   'checkbox',
@@ -32,8 +39,12 @@ export const assertClassroomMember = async (classroomId, userId) => {
 
 /**
  * Verify that the requesting user is the OWNER of the classroom.
+ * Note: Used internally by this service.
+ * @param {string} classroomId
+ * @param {string} userId
+ * @returns {Promise<Object>} The classroom user member object
  */
-export const assertClassroomOwner = async (classroomId, userId) => {
+const assertClassroomOwner = async (classroomId, userId) => {
   const member = await assertClassroomMember(classroomId, userId);
   if (member.role !== 'OWNER') throw new ApiError(403, 'Only the classroom owner can perform this action');
   return member;
@@ -42,8 +53,12 @@ export const assertClassroomOwner = async (classroomId, userId) => {
 /**
  * Verify that the requesting user created the activity (or is classroom owner).
  * Returns the activity.
+ * Note: Used internally by this service.
+ * @param {string} activityId
+ * @param {string} userId
+ * @returns {Promise<Object>} The activity object
  */
-export const assertActivityEditor = async (activityId, userId) => {
+const assertActivityEditor = async (activityId, userId) => {
   const activity = await prisma.activity.findUnique({ where: { id: activityId } });
   if (!activity) throw new ApiError(404, 'Activity not found');
 
