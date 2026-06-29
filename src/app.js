@@ -44,14 +44,7 @@ app.use(cors({
     // Allow requests with no origin (e.g., curl, Postman, server-to-server calls)
     if (!origin) return callback(null, true);
 
-    const cleanOrigin = origin.trim().replace(/\/$/, '');
-    const isAllowed = ALLOWED_ORIGINS.some(allowed => {
-      if (!allowed) return false;
-      const cleanAllowed = allowed.trim().replace(/\/$/, '');
-      return cleanOrigin === cleanAllowed;
-    });
-
-    if (isAllowed) {
+    if (ALLOWED_ORIGINS.includes(origin)) {
       // Origin is whitelisted — allow it
       callback(null, true);
     } else {
