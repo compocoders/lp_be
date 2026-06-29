@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import sendgrid from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -9,6 +10,7 @@ import dns from 'dns';
 dns.setDefaultResultOrder('ipv4first');
 
 let resend;
+let isSendGrid = false;
 let transporter;
 let isEthereal = false;
 let isGmail = false;
@@ -29,6 +31,10 @@ if (env.SMTP_USER && env.SMTP_PASSWORD) {
   });
   isGmail = env.SMTP_HOST.includes('gmail');
   console.log(`✅ Email service initialized with SMTP at ${env.SMTP_HOST} (User: ${env.SMTP_USER})`);
+} else if (env.SENDGRID_API_KEY) {
+  sendgrid.setApiKey(env.SENDGRID_API_KEY);
+  isSendGrid = true;
+  console.log('✅ Email service initialized with SendGrid Web API');
 } else if (env.RESEND_API_KEY) {
   resend = new Resend(env.RESEND_API_KEY);
   console.log('✅ Email service initialized with Resend');
@@ -77,6 +83,24 @@ export const sendEmail = async (to, subject, html) => {
     console.log(`📩 [TEST EMAIL SENT] To: ${to} | Subject: ${subject}`);
     console.log(`🔍 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
     return info;
+  } else if (isSendGrid) {
+    try {
+      const msg = {
+        to,
+        from: `Likhâ <${env.SENDGRID_SENDER_EMAIL || 'noreply@likha.app'}>`, // Ensure this matches verified sender in SendGrid
+        subject,
+        html,
+      };
+      await sendgrid.send(msg);
+      console.log(`📩 [SENDGRID SENT] To: ${to} | Subject: ${subject}`);
+      return { success: true };
+    } catch (error) {
+      console.error('SendGrid error:', error);
+      if (error.response) {
+        console.error(error.response.body);
+      }
+      throw new ApiError(500, 'Failed to send email via SendGrid');
+    }
   } else if (resend) {
     const { data, error } = await resend.emails.send({
       from: 'Likhâ <onboarding@resend.dev>', // Update this when you have a verified domain on Resend

@@ -59,6 +59,8 @@ const envSchema = z.object({
 
   // ─── Email Services ───────────────────────────────────────────────────────
   RESEND_API_KEY: z.string().optional(),
+  SENDGRID_API_KEY: z.string().optional(),
+  SENDGRID_SENDER_EMAIL: z.string().optional(),
   SMTP_HOST: z.string().default('smtp.gmail.com'),
   SMTP_PORT: z.string().default('587'),
   SMTP_USER: z.string().optional(),
