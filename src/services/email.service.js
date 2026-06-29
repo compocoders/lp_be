@@ -14,21 +14,21 @@ let isEthereal = false;
 let isGmail = false;
 
 // Initialize email transport
-if (env.SMTP_EMAIL && env.SMTP_PASSWORD) {
+if (env.SMTP_USER && env.SMTP_PASSWORD) {
   transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    host: env.SMTP_HOST,
+    port: parseInt(env.SMTP_PORT, 10),
+    secure: env.SMTP_PORT === '465', // true for 465, false for other ports
     requireTLS: true,
     auth: {
-      user: env.SMTP_EMAIL,
+      user: env.SMTP_USER,
       pass: env.SMTP_PASSWORD,
     },
     // Force IPv4 to prevent ENETUNREACH in environments without outbound IPv6 (like Render)
     family: 4,
   });
-  isGmail = true;
-  console.log(`✅ Email service initialized with Gmail SMTP (${env.SMTP_EMAIL})`);
+  isGmail = env.SMTP_HOST.includes('gmail');
+  console.log(`✅ Email service initialized with SMTP at ${env.SMTP_HOST} (User: ${env.SMTP_USER})`);
 } else if (env.RESEND_API_KEY) {
   resend = new Resend(env.RESEND_API_KEY);
   console.log('✅ Email service initialized with Resend');
@@ -58,9 +58,9 @@ if (env.SMTP_EMAIL && env.SMTP_PASSWORD) {
  * Sends an email using Gmail SMTP, Resend, or Ethereal (local dev).
  */
 export const sendEmail = async (to, subject, html) => {
-  if (isGmail && transporter) {
+  if ((isGmail || transporter) && !isEthereal && !resend) {
     const info = await transporter.sendMail({
-      from: `"Likhâ" <${env.SMTP_EMAIL}>`,
+      from: `"Likhâ" <${env.SMTP_USER}>`,
       to,
       subject,
       html,
