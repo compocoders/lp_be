@@ -43,8 +43,8 @@ export const register = async (req, res, next) => {
     // Set the JWT as a secure httpOnly cookie — do NOT expose it in the response body
     res.cookie('token', result.token, getCookieOptions());
 
-    // Return only the user's public data, never the raw token
-    res.status(201).json({ user: result.user });
+    // Return the user's data and token so the frontend can use the Authorization header fallback
+    res.status(201).json({ user: result.user, token: result.token });
   } catch (error) {
     next(error);
   }
@@ -62,8 +62,8 @@ export const login = async (req, res, next) => {
     // Set the JWT as a secure httpOnly cookie — do NOT expose it in the response body
     res.cookie('token', result.token, getCookieOptions());
 
-    // Return 200 OK (not 201 Created — login doesn't create a new resource)
-    res.status(200).json({ user: result.user });
+    // Return 200 OK and include the token for the Authorization header fallback
+    res.status(200).json({ user: result.user, token: result.token });
   } catch (error) {
     next(error);
   }
