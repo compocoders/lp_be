@@ -11,11 +11,15 @@ let isGmail = false;
 // Initialize email transport
 if (env.SMTP_EMAIL && env.SMTP_PASSWORD) {
   transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: env.SMTP_EMAIL,
       pass: env.SMTP_PASSWORD,
     },
+    // Force IPv4 to prevent ENETUNREACH in environments without outbound IPv6 (like Render)
+    family: 4,
   });
   isGmail = true;
   console.log(`✅ Email service initialized with Gmail SMTP (${env.SMTP_EMAIL})`);
