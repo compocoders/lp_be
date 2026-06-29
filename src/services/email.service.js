@@ -2,6 +2,11 @@ import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
+import dns from 'dns';
+
+// Force Node.js to prefer IPv4 over IPv6 when resolving hostnames.
+// Render environments often lack proper IPv6 routing, causing ENETUNREACH errors.
+dns.setDefaultResultOrder('ipv4first');
 
 let resend;
 let transporter;
