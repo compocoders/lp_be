@@ -108,15 +108,14 @@ const ideaSparkSchema = z.object({
 // ─── Middleware Stack ─────────────────────────────────────────────────────────
 // All AI routes require authentication
 router.use(authenticate);
-// All AI routes are rate-limited (burst protection on top of the token wallet)
-router.use(aiLimiter);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Token info — does NOT call the AI and does NOT deduct tokens
 router.get('/token-info', getTokenInfo);
 
-// All routes below this line require tokens (calls the Gemini API)
+// All routes below this line require tokens (calls the Gemini API) and are strictly rate-limited
+router.use(aiLimiter);
 router.use(checkAndDeductTokens);
 
 router.post('/chat-document',         validate(chatDocumentSchema),         chatWithDocument);

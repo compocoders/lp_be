@@ -49,8 +49,8 @@ export const getRoomsbyCode = async (code) => {
             }
         }
     });
-    if (rooms.length === 0) throw new Error('No rooms found with the provided code');
-    if(rooms[0].status === 'DELETED') throw new Error('This class is not available');
+    if (rooms.length === 0) throw new ApiError(400, 'No rooms found with the provided code');
+    if(rooms[0].status === 'DELETED') throw new ApiError(400, 'This class is not available');
     return rooms;
 }
 
@@ -93,10 +93,10 @@ export const createRooms = async (data) => {
     // We use a transaction so if the user creation fails, the room isn't created either
     const [room, classRoomUser] = await prisma.$transaction(async (tx) => {
         if (data.private && !data.roomPassword) {
-            throw new Error('Private rooms must have a password');
+            throw new ApiError(400, 'Private rooms must have a password');
         }
         if (!data.private && data.roomPassword) {
-            throw new Error('Public rooms cannot have a password');
+            throw new ApiError(400, 'Public rooms cannot have a password');
         }
         const newRoom = await tx.classroom.create({
             data: {
@@ -129,15 +129,15 @@ export const updateRooms = async (id, data, requestingUserId) => {
     // We must pass the requestingUserId from the controller to verify ownership
     const room = await prisma.classroom.findUnique({ where: { id } });
     
-    if (!room) throw new Error('Room not found');
-    if (room.userId !== requestingUserId) throw new Error('Unauthorized'); // Fixed logic
+    if (!room) throw new ApiError(404, 'Room not found');
+    if (room.userId !== requestingUserId) throw new ApiError(403, 'Unauthorized'); // Fixed logic
 
     let newHashedPassword = undefined;
 
     if (data.private) {
         // If it's private, we need a password.
         if (!room.roompassword && !data.roomPassword) {
-            throw new Error('A password is required when making a room private.');
+            throw new ApiError(400, 'A password is required when making a room private.');
         }
 
         if (data.roomPassword) {
@@ -145,11 +145,11 @@ export const updateRooms = async (id, data, requestingUserId) => {
             if (room.roompassword) {
                 // If there's an existing password, they must provide oldPassword
                 if (!data.oldPassword) {
-                    throw new Error('You must provide the previous password to change it.');
+                    throw new ApiError(400, 'You must provide the previous password to change it.');
                 }
                 const passwordMatch = await bcrypt.compare(data.oldPassword, room.roompassword);
                 if (!passwordMatch) {
-                    throw new Error('Incorrect previous password.');
+                    throw new ApiError(400, 'Incorrect previous password.');
                 }
             }
             newHashedPassword = await bcrypt.hash(data.roomPassword, 10);
@@ -176,8 +176,8 @@ export const updateRooms = async (id, data, requestingUserId) => {
 export const deleteRooms = async (id, requestingUserId) => {
     const room = await prisma.classroom.findUnique({ where: { id } });
     
-    if (!room) throw new Error('Room not found');
-    if (room.userId !== requestingUserId) throw new Error('Unauthorized'); // Fixed logic
+    if (!room) throw new ApiError(404, 'Room not found');
+    if (room.userId !== requestingUserId) throw new ApiError(403, 'Unauthorized'); // Fixed logic
 
     // Soft delete: Update the status instead of dropping the row entirely
     const deletedRoom = await prisma.classroom.update({
@@ -190,8 +190,8 @@ export const deleteRooms = async (id, requestingUserId) => {
 // Generate invite token (JWT) for a classroom
 export const generateInviteToken = async (classroomId, requestingUserId) => {
     const room = await prisma.classroom.findUnique({ where: { id: classroomId } });
-    if (!room) throw new Error('Room not found');
-    if (room.userId !== requestingUserId) throw new Error('Unauthorized: Only the owner can generate an invite link');
+    if (!room) throw new ApiError(404, 'Room not found');
+    if (room.userId !== requestingUserId) throw new ApiError(403, 'Unauthorized: Only the owner can generate an invite link');
 
     const token = jwt.sign({ classroomId }, env.JWT_SECRET, { expiresIn: '24h' });
     return token;
@@ -273,11 +273,11 @@ export const leaveRoom = async (classroomId, userId) => {
     });
 
     if (!membership) {
-        throw new Error('You are not a member of this room');
+        throw new ApiError(400, 'You are not a member of this room');
     }
 
     if (membership.role === 'OWNER') {
-        throw new Error('Owners cannot leave their own room, they can only delete it');
+        throw new ApiError(400, 'Owners cannot leave their own room, they can only delete it');
     }
 
     await prisma.classroomUser.delete({
@@ -285,4 +285,39 @@ export const leaveRoom = async (classroomId, userId) => {
     });
 
     return { message: 'Successfully left the room' };
+}
+
+// Remove a member from a room (Owner only)
+export const removeMember = async (classroomId, userIdToRemove, requestingUserId) => {
+    // Check if classroom exists and if requesting user is owner
+    const room = await prisma.classroom.findUnique({
+        where: { id: classroomId }
+    });
+
+    if (!room) {
+        throw new ApiError(404, 'Room not found');
+    }
+
+    if (room.userId !== requestingUserId) {
+        throw new ApiError(403, 'Unauthorized: Only the owner can remove members');
+    }
+
+    if (userIdToRemove === requestingUserId) {
+        throw new ApiError(400, 'You cannot remove yourself from the classroom');
+    }
+
+    // Find the membership to remove
+    const membership = await prisma.classroomUser.findFirst({
+        where: { classroomId, userId: userIdToRemove }
+    });
+
+    if (!membership) {
+        throw new ApiError(404, 'User is not a member of this classroom');
+    }
+
+    await prisma.classroomUser.delete({
+        where: { id: membership.id }
+    });
+
+    return { message: 'Successfully removed the member' };
 }

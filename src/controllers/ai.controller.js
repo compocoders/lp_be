@@ -501,7 +501,23 @@ export const generateStudyMaterial = async (req, res, next) => {
         
         let prompt = '';
         if (type === 'quiz') {
-            prompt = `You are Likhâ, a friendly and highly accurate human-like tutor. Based ONLY on the following document context, create a quick 5-question multiple choice review quiz to help the user practice. Keep the tone natural and encouraging. CRITICAL INSTRUCTION: Write the response entirely in plain text. DO NOT use any Markdown formatting (no asterisks or hashes). Use regular numbering like 1) 2) 3).`;
+            const randomSeed = Math.floor(Math.random() * 100000);
+            prompt = `You are Likhâ, a friendly and highly accurate human-like tutor. Based ONLY on the following document context, create a multiple choice review quiz to help the user practice.
+To ensure variety, focus on random, diverse concepts scattered throughout the document (Seed: ${randomSeed}).
+
+CRITICAL INSTRUCTION: You MUST generate EXACTLY 5 questions.
+CRITICAL INSTRUCTION: You MUST respond strictly in the following JSON format. Do not include any other text or markdown:
+{
+  "questions": [
+    {
+      "question": "The question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Brief explanation of why this is correct."
+    }
+  ]
+}
+Note: Ensure there are exactly 5 objects inside the "questions" array.`;
         } else {
             prompt = `You are Likhâ, a friendly and highly accurate human-like tutor. Based ONLY on the following document context, provide some concise study notes. Explain the concepts naturally as if you are speaking to the student. CRITICAL INSTRUCTION: Write the response entirely in plain text. DO NOT use any Markdown formatting (no asterisks or hashes). Use ALL CAPS for important terms instead of bolding.`;
         }
@@ -519,8 +535,13 @@ export const generateStudyMaterial = async (req, res, next) => {
         const tokensToDeduct = calculateVirtualTokens(result.response.usageMetadata);
         await req.tokenWallet.deductTokens(tokensToDeduct);
 
+        let finalContent = result.response.text();
+        if (type === 'quiz') {
+            finalContent = finalContent.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+        }
+
         res.json({
-            content: result.response.text(),
+            content: finalContent,
             tokensUsed: tokensToDeduct,
             remainingTokens: req.tokenWallet.availableTokens - tokensToDeduct
         });

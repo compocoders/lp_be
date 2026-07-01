@@ -85,3 +85,12 @@ export const leaveRoom = async (req, res, next) => {
         next(error);
     }
 }
+
+export const removeMember = async (req, res, next) => {
+    try {
+        const result = await classroomService.removeMember(req.params.id, req.params.userId, req.user.id);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+}

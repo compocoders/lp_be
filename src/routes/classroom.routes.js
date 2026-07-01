@@ -88,4 +88,7 @@ router.post('/join/:token',  authenticate, classroomController.joinRoomViaInvite
 // Leave a classroom
 router.delete('/:id/leave',  authenticate, classroomController.leaveRoom);
 
+// Remove a member (Owner only)
+router.delete('/:id/members/:userId', authenticate, classroomController.removeMember);
+
 export default router;
