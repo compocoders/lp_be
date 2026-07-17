@@ -173,6 +173,10 @@ export const updatePasswordUser = async (userId, currentPassword, newPassword) =
   });
 };
 
+export const getUserProfile = async (userId) => {
+  return prisma.profile.findUnique({ where: { userId } });
+};
+
 export const verifyEmailOTP = async (userId, otp) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new ApiError(404, 'User not found');

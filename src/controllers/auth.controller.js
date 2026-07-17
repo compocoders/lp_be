@@ -76,11 +76,13 @@ export const login = async (req, res, next) => {
  */
 export const getMe = async (req, res, next) => {
   try {
+    const profile = await authService.getUserProfile(req.user.id);
     res.status(200).json({
       user: {
         id: req.user.id,
         email: req.user.email,
         isEmailVerified: req.user.isEmailVerified,
+        hasProfile: !!profile,
       },
     });
   } catch (error) {
