@@ -78,6 +78,35 @@ export const uploadGenericFile = async (file) => {
     }
 };
 
+export const uploadLearningMaterial = async (file) => {
+    if (!env.R2_ACCOUNT_ID || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.R2_BUCKET_NAME) {
+        throw new ApiError(500, 'Cloudflare R2 configuration is missing');
+    }
+
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const uniqueFilename = `materials/${crypto.randomUUID()}${fileExtension}`;
+
+    const command = new PutObjectCommand({
+        Bucket: env.R2_BUCKET_NAME,
+        Key: uniqueFilename,
+        Body: file.buffer,
+        ContentType: file.mimetype || 'application/octet-stream',
+    });
+
+    try {
+        await s3Client.send(command);
+        let publicUrl = env.R2_PUBLIC_URL.replace(/\/+$/, '');
+        return {
+            fileUrl: `${publicUrl}/${uniqueFilename}`,
+            key: uniqueFilename
+        };
+    } catch (error) {
+        console.error('S3 Upload Error:', error);
+        throw new ApiError(500, 'Failed to upload learning material to Cloudflare R2');
+    }
+};
+
+
 export const deleteFile = async (fileUrl) => {
     if (!fileUrl) return;
 

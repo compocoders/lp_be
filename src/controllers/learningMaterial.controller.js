@@ -14,7 +14,7 @@ export const createLearningMaterial = async (req, res, next) => {
         }
 
         //upload file to s3
-        const { fileUrl, key } = await s3Service.uploadlearningMaterial(req.file);
+        const { fileUrl, key } = await s3Service.uploadLearningMaterial(req.file);
 
         //create learning material
         const learningMaterial = await learningMaterialsService.createLearningMaterial({
@@ -80,7 +80,7 @@ export const updateLearningMaterial = async (req, res, next) => {
                 await s3Service.deleteFile(existing.fileUrl);
             }
             // Upload new file
-            const uploaded = await s3Service.uploadlearningMaterial(req.file);
+            const uploaded = await s3Service.uploadLearningMaterial(req.file);
             fileUrl = uploaded.fileUrl;
         }
 
