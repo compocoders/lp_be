@@ -43,7 +43,6 @@ const resetPasswordSchema = z.object({
 
 const verifyEmailSchema = z.object({
   body: z.object({
-    email: z.string().email('Please provide a valid email address'),
     otp: z.string().length(6, 'OTP must be exactly 6 digits'),
   }),
 });
@@ -80,8 +79,8 @@ router.post('/verify-reset-otp', validate(verifyResetOtpSchema), authController.
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 
 // Email Verification Routes
-router.post('/verify-email', validate(verifyEmailSchema), authController.verifyEmail);
-router.post('/resend-verification', authController.resendVerification);
+router.post('/verify-email', authenticate, validate(verifyEmailSchema), authController.verifyEmail);
+router.post('/resend-verification', authenticate, authController.resendVerification);
 
 // Protected Profile & Settings Routes
 router.post('/request-email-update', authenticate, validate(requestEmailUpdateSchema), authController.requestEmailUpdate);
