@@ -602,7 +602,7 @@ Questions and Student Answers:
         submission.answers.forEach(ans => {
             const q = submission.Activity.questions.find(q => q.id === ans.questionId);
             if (q) {
-                promptText += `\n--- Question ID: ${q.id} ---\nQuestion (${q.points} Pts): ${q.content}\nStudent Answer: ${JSON.stringify(ans.content)}\n`;
+                promptText += `\n--- Answer ID: ${ans.id} ---\nQuestion (${q.points} Pts): ${q.content}\nStudent Answer: ${JSON.stringify(ans.content)}\n`;
             }
         });
 
