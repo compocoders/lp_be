@@ -43,13 +43,14 @@ export const runCode = async ({ language, sourceCode, stdin = '' }) => {
     }
 
     const data = await response.json();
-    
-    // Status ID 3 means Accepted. ID 6 means Compilation Error.
-    const isSuccess = data.status?.id === 3;
-    const isCompilationError = data.status?.id === 6;
+
+    const statusId = data.status?.id;
+    const statusDescription = data.status?.description?.toLowerCase() || '';
+    const hasCompileError = statusId === 6 || statusDescription.includes('compile') || statusDescription.includes('compilation');
+    const isSuccess = statusId === 3;
 
     return {
-      status: isSuccess ? 'accepted' : (isCompilationError ? 'compile_error' : 'runtime_error'),
+      status: isSuccess ? 'accepted' : (hasCompileError ? 'compile_error' : 'runtime_error'),
       stdout: data.stdout || '',
       stderr: data.stderr || '',
       compileOutput: data.compile_output || '',
