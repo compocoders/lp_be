@@ -10,6 +10,19 @@ export const SUPPORTED_LANGUAGES = {
   c: { language_id: 50 }, // C (GCC)
 };
 
+const prepareJavaSource = (sourceCode) => {
+  if (typeof sourceCode !== 'string' || !sourceCode.trim()) return sourceCode;
+
+  const trimmedCode = sourceCode.trim();
+  const publicClassMatch = trimmedCode.match(/\bpublic\s+(?:final\s+|abstract\s+|sealed\s+|non-sealed\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)/);
+
+  if (!publicClassMatch?.[1] || publicClassMatch[1] === 'Main') {
+    return trimmedCode;
+  }
+
+  return trimmedCode.replace(/\bpublic\s+(?:final\s+|abstract\s+|sealed\s+|non-sealed\s+)*class\s+[A-Za-z_][A-Za-z0-9_]*/, 'public class Main');
+};
+
 /**
  * Execute source code remotely via Judge0 API.
  */
@@ -22,16 +35,22 @@ export const runCode = async ({ language, sourceCode, stdin = '' }) => {
   }
 
   try {
+    const requestBody = {
+      language_id: langConfig.language_id,
+      source_code: normalizedLang === 'java' ? prepareJavaSource(sourceCode) : sourceCode,
+      stdin: stdin || "",
+    };
+
+    if (normalizedLang === 'java') {
+      requestBody.file_name = 'Main.java';
+    }
+
     const response = await fetch('https://ce.judge0.com/submissions?base64_encoded=false&wait=true', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        language_id: langConfig.language_id,
-        source_code: sourceCode,
-        stdin: stdin || "",
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
