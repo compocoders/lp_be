@@ -46,14 +46,16 @@ export const runCode = async ({ language, sourceCode, stdin = '' }) => {
 
     const statusId = data.status?.id;
     const statusDescription = data.status?.description?.toLowerCase() || '';
-    const hasCompileError = statusId === 6 || statusDescription.includes('compile') || statusDescription.includes('compilation');
+    const compileOutput = typeof data.compile_output === 'string' ? data.compile_output : '';
+    const hasCompileOutput = compileOutput.trim().length > 0;
+    const hasCompileError = statusId === 6 || statusDescription.includes('compile') || statusDescription.includes('compilation') || hasCompileOutput;
     const isSuccess = statusId === 3;
 
     return {
       status: isSuccess ? 'accepted' : (hasCompileError ? 'compile_error' : 'runtime_error'),
       stdout: data.stdout || '',
       stderr: data.stderr || '',
-      compileOutput: data.compile_output || '',
+      compileOutput,
       success: isSuccess,
     };
   } catch (error) {
