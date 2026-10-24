@@ -29,23 +29,28 @@ const app = express();
 app.use(helmet());
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
-// Only allow requests from known, trusted frontend origins.
-// We NEVER use `origin: true` (wildcard reflection) in combination with credentials
-// because that allows any malicious site to make authenticated requests on behalf
-// of a logged-in user (CSRF-like attack).
+// Allow configured frontend URL(s), localhost, and local network IPs (for LAN testing)
+const customOrigins = env.FRONTEND_URL 
+  ? env.FRONTEND_URL.split(',').map((url) => url.trim().replace(/\/+$/, '')) 
+  : [];
+
 const ALLOWED_ORIGINS = [
-  'http://localhost:5173',   // Vite dev server (local development)
-  'http://localhost:3000',   // Sometimes used for local testing
-  env.FRONTEND_URL,          // Production frontend URL (set in .env)
-].filter(Boolean);           // Remove undefined/null if FRONTEND_URL isn't set
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:8080',
+  ...customOrigins,
+].filter(Boolean);
+
+// Regex matching private/local IPv4 addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+const LOCAL_IP_REGEX = /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., curl, Postman, server-to-server calls)
+    // Allow requests with no origin (e.g., curl, mobile apps, server-to-server calls)
     if (!origin) return callback(null, true);
 
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      // Origin is whitelisted — allow it
+    if (ALLOWED_ORIGINS.includes(origin) || LOCAL_IP_REGEX.test(origin)) {
+      // Origin is whitelisted or local LAN IP — allow it
       callback(null, true);
     } else {
       // Origin is not in the whitelist — block it

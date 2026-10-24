@@ -39,9 +39,9 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('1d'),
 
   // ─── CORS ─────────────────────────────────────────────────────────────────
-  // The production frontend URL added to the CORS whitelist.
-  // Example: https://yourapp.vercel.app
-  FRONTEND_URL: z.string().url().optional(),
+  // The production frontend URL(s) added to the CORS whitelist (comma-separated if multiple).
+  // Example: https://yourapp.com,http://192.168.1.5:8080
+  FRONTEND_URL: z.string().optional(),
 
   // ─── Cloudflare R2 Storage ────────────────────────────────────────────────
   R2_ACCOUNT_ID: z.string().optional(),
